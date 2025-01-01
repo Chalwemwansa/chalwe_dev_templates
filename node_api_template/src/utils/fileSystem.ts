@@ -11,6 +11,7 @@ export interface MediaFile {
 export interface UploadedFile {
   url: string;
   type: "image" | "video";
+  thumbnail?: string;
 }
 
 const homeUrl = `http://127.0.0.1:${process.env.PORT || 4000}`;
@@ -58,12 +59,21 @@ const fileSystem = {
       const root = path.join(__dirname, "..", folder);
       await Promise.all(
         files.map(async (file) => {
-          const filename = file.url.replace(homeUrl, "");
-          const filePath = path.join(root, filename);
+          let filename = file.url.replace(homeUrl, "");
+          let filePath = path.join(root, filename);
           try {
             await fs.promises.unlink(filePath);
           } catch (e: any) {
             console.warn(`Failed to delete ${filename}: ${e.message}`);
+          }
+          if (file.thumbnail) {
+            filename = file.thumbnail.replace(homeUrl, "");
+            filePath = path.join(root, filename);
+            try {
+              await fs.promises.unlink(filePath);
+            } catch (e: any) {
+              console.warn(`Failed to delete ${filename}: ${e.message}`);
+            }
           }
         })
       );
