@@ -1,76 +1,76 @@
 import fs from "fs";
 import path from "path";
 
-// Define the type for a picture object
-interface Picture {
+// Define the type for a file object
+export interface MediaFile {
   name: string; // File name, including extension
+  type: string;
   mv: (destination: string) => Promise<void>; // Method to move the file, returns a promise
 }
 
-const fileSystem = {
-  /**
-   * Uploads one or more pictures and returns their filenames.
-   *
-   * @param pictures - An array of pictures or a single picture to be uploaded
-   * @returns A promise that resolves to an array of uploaded filenames
-   */
-  upload: async (
-    pictures: Picture | Picture[]
-  ): Promise<string[] | { error: string }> => {
-    try {
-      const pics: string[] = [];
-      let filename: string;
-      let name: string;
-      let filePath: string;
+export interface UploadedFile {
+  url: string;
+  type: "image" | "video";
+}
 
-      // Handle multiple pictures if uploaded
-      if (Array.isArray(pictures)) {
-        for (const picture of pictures) {
-          name = `${picture.name.split(".")[0]}.jpeg`; // Convert to JPEG format
-          filename = `${Date.now()}-${name}`;
-          filePath = path.join("uploads", filename);
-          await picture.mv(filePath); // Await the move operation
-          pics.push(filename);
+const homeUrl = `http://127.0.0.1:${process.env.PORT || 4000}`;
+
+const fileSystem = {
+  async upload(
+    mediaFiles: MediaFile | MediaFile[],
+    folder: string = "uploads"
+  ): Promise<UploadedFile[] | { error: string }> {
+    try {
+      const uploadedFiles: UploadedFile[] = [];
+      const handleFileUpload = async (file: MediaFile) => {
+        const extension = file.name.split(".").pop()?.toLowerCase();
+        let name = file.name;
+
+        if (extension === "jfif") {
+          name = `${file.name.split(".")[0]}.jpeg`;
         }
+
+        const filename = `${Date.now()}-${name}`;
+        const filePath = path.join(folder, filename);
+        await file.mv(filePath);
+        const mediaType = file.type.startsWith("image") ? "image" : "video";
+        uploadedFiles.push({ url: `${homeUrl}/${filename}`, type: mediaType });
+      };
+
+      if (Array.isArray(mediaFiles)) {
+        await Promise.all(mediaFiles.map(handleFileUpload));
       } else {
-        // Handle single picture if uploaded
-        name = pictures.name;
-        if (pictures.name.split(".")[1] === "jfif") {
-          name = `${pictures.name.split(".")[0]}.jpeg`; // Convert jfif to jpeg
-        }
-        filename = `${Date.now()}_${name}`;
-        filePath = path.join("uploads", filename);
-        await pictures.mv(filePath);
-        pics.push(filename);
+        await handleFileUpload(mediaFiles);
       }
-      return pics;
+
+      return uploadedFiles;
     } catch (e: any) {
       console.error(e);
-      return { error: e.message }; // Return the error as an object
+      return { error: `Upload failed: ${e.message}` };
     }
   },
 
-  /**
-   * Deletes one or more pictures from the file system.
-   *
-   * @param pictures - An array of picture filenames to delete
-   * @returns A promise that resolves when deletion is complete
-   */
-  delete: async (pictures: string[]): Promise<{ error?: string }> => {
+  async delete(
+    files: UploadedFile[],
+    folder: string = "uploads"
+  ): Promise<{ error?: string }> {
     try {
-      const root = path.join(__dirname, "..", "uploads");
-      for (const picture of pictures) {
-        const filePath = path.join(root, picture);
-        try {
-          await fs.promises.unlink(filePath); // Use promises API to delete file
-        } catch (e: any) {
-          console.warn(`Failed to delete ${picture}: ${e.message}`);
-        }
-      }
+      const root = path.join(__dirname, "..", folder);
+      await Promise.all(
+        files.map(async (file) => {
+          const filename = file.url.replace(homeUrl, "");
+          const filePath = path.join(root, filename);
+          try {
+            await fs.promises.unlink(filePath);
+          } catch (e: any) {
+            console.warn(`Failed to delete ${filename}: ${e.message}`);
+          }
+        })
+      );
       return {};
     } catch (e: any) {
       console.error(e);
-      return { error: e.message };
+      return { error: `Delete failed: ${e.message}` };
     }
   },
 };
